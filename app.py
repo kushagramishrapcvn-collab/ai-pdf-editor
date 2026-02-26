@@ -31,11 +31,22 @@ if st.button("Process & Edit PDF"):
                 # 2. Call the 2026 Model (gemini-2.5-flash is the stable workhorse)
                 # If you want the ultra-new preview, use 'gemini-3-flash-preview'
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash', 
-                    contents=f"Document Content: {original_text}\n\nTask: {user_command}"
+    model='gemini-2.5-flash',
+    config={
+        "system_instruction": "You are a helpful academic assistant. Do not use Markdown code blocks or backticks. Write in plain, clear human language. Use bullet points for steps and clearly labeled sections for math problems."
+    },
+    contents=f"Document Content: {original_text}\n\nTask: {user_command}"
+)
                 )
                 edited_text = response.text
 
+                st.subheader("AI Preview (Human Language)")
+                st.markdown(edited_text) # This shows bold, tables, and math nicely!
+                st.divider()
+                
+                # --- PDF CREATION STARTS HERE ---
+                pdf = FPDF()
+                # ... (rest of your PDF code)
                 # 3. Create New PDF
                 pdf = FPDF()
                 pdf.add_page()
