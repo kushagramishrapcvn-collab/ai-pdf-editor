@@ -1,57 +1,56 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai  # Modern 2026 SDK
 from pypdf import PdfReader
 from fpdf import FPDF
 import io
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="AI PDF Editor", page_icon="📄")
+st.set_page_config(page_title="AI PDF Editor 2026", page_icon="📄")
 st.title("📄 AI PDF Editor")
-st.markdown("Upload a PDF and tell the AI how to edit or summarize it.")
 
-# Enter your Google Gemini API Key here
-API_KEY = "AIzaSyB9jSkAQjZZm-UTyz0apVBtdShCwrT_YjQ"
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-3-flash')
+# Use the Secret you set up in Streamlit Settings
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=API_KEY)
+except Exception:
+    st.error("API Key missing! Please add 'GEMINI_API_KEY' to your Streamlit Secrets.")
+    st.stop()
 
-# --- 2. THE UI (The Website Part) ---
-uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
-user_command = st.text_area("AI Command", placeholder="e.g., 'Extract all trigonometry formulas and simplify them' or 'Summarize page 1'")
+# --- 2. THE UI ---
+uploaded_file = st.file_uploader("Upload your Math/Data PDF", type="pdf")
+user_command = st.text_area("What should the AI do?", placeholder="e.g. 'Solve the calculus limits on page 2' or 'Summarize the conics section'")
 
 if st.button("Process & Edit PDF"):
     if uploaded_file is not None and user_command:
-        with st.spinner("AI is thinking..."):
+        with st.spinner("Gemini 3 Flash is analyzing your data..."):
             try:
-                # Read the PDF
+                # 1. Extract Text
                 reader = PdfReader(uploaded_file)
-                original_text = ""
-                for page in reader.pages:
-                    original_text += page.extract_text()
+                original_text = "\n".join([page.extract_text() for page in reader.pages])
 
-                # Send to AI
-                prompt = f"Context: {original_text}\n\nTask: {user_command}\n\nPlease provide the edited text content for a new PDF document."
-                response = model.generate_content(prompt)
+                # 2. Call the 2026 Model (gemini-2.5-flash is the stable workhorse)
+                # If you want the ultra-new preview, use 'gemini-3-flash-preview'
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash', 
+                    contents=f"Document Content: {original_text}\n\nTask: {user_command}"
+                )
                 edited_text = response.text
 
-                # Create New PDF
+                # 3. Create PDF
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", size=12)
-                # Ensure text fits PDF encoding
                 clean_text = edited_text.encode('latin-1', 'replace').decode('latin-1')
                 pdf.multi_cell(0, 10, clean_text)
                 
-                # Output to a buffer so the user can download it
                 pdf_output = pdf.output(dest='S').encode('latin-1')
                 
-                st.success("Done! Your edited PDF is ready.")
+                st.success("Analysis Complete!")
                 st.download_button(
-                    label="Download Edited PDF",
+                    label="Download Result",
                     data=pdf_output,
-                    file_name="edited_document.pdf",
+                    file_name="ai_edited_math_notes.pdf",
                     mime="application/pdf"
                 )
             except Exception as e:
-                st.error(f"An error occurred: {e}")
-    else:
-        st.warning("Please upload a file and type a command first!")
+                st.error(f"Error: {e}")
