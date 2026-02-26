@@ -64,10 +64,28 @@ if st.button("Apply Changes & Keep Format"):
                         # 4. INSERT TEXTBOX (This handles the wrapping!)
                         page.insert_textbox(
                             wrap_box, 
+                            # 1. Ask AI for replacement
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=f"Old text: '{target_text}'. Instruction: {new_instruction}. Return ONLY the replacement text."
+                        )
+                        replacement = response.text.strip()
+
+                        # 2. THE FIX: Make the box WIDER (x1 + 20) but keep the height TIGHT (y1 + 2)
+                        # This prevents the '6' from falling to the next line.
+                        wrap_box = fitz.Rect(inst.x0, inst.y0, inst.x1 + 20, inst.y1 + 2)
+
+                        # 3. 'Whiten' the area
+                        page.add_redact_annot(wrap_box, fill=(1, 1, 1)) 
+                        page.apply_redactions()
+
+                        # 4. Insert Text (Use insert_text instead of textbox for short numbers)
+                        # insert_text is better for single lines like "76"
+                        page.insert_text(
+                            inst.tl, 
                             replacement, 
                             fontsize=10, 
                             fontname="helv", 
-                            align=0, # 0 = Left align
                             color=(0, 0, 0)
                         )
             if found:
