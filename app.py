@@ -28,28 +28,25 @@ if st.button("Process & Edit PDF"):
                 reader = PdfReader(uploaded_file)
                 original_text = "\n".join([page.extract_text() for page in reader.pages])
 
-                # 2. Call the 2026 Model (gemini-2.5-flash is the stable workhorse)
-                # If you want the ultra-new preview, use 'gemini-3-flash-preview'
+                # 2. Call the AI with System Instructions (ENSURE ALIGNMENT HERE)
                 response = client.models.generate_content(
-    model='gemini-2.5-flash',
-    config={
-        "system_instruction": "You are a helpful academic assistant. Do not use Markdown code blocks or backticks. Write in plain, clear human language. Use bullet points for steps and clearly labeled sections for math problems."
-    },
-    contents=f"Document Content: {original_text}\n\nTask: {user_command}"
-)
-                 edited_text = response.text
-
-                st.subheader("AI Preview (Human Language)")
-                st.markdown(edited_text) # This shows bold, tables, and math nicely!
-                st.divider()
+                    model='gemini-2.5-flash',
+                    config={
+                        "system_instruction": "You are a helpful academic assistant. Write in plain, clear human language. Use bullet points and clearly labeled sections."
+                    },
+                    contents=f"Document Content: {original_text}\n\nTask: {user_command}"
+                )
                 
-                # --- PDF CREATION STARTS HERE ---
-                pdf = FPDF()
-                # ... (rest of your PDF code)
-                # 3. Create New PDF
+                edited_text = response.text
+
+                st.subheader("AI Analysis")
+                st.markdown(edited_text)
+                
+                # 4. Create PDF
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", size=12)
+                # ... (rest of the code)
                 
                 # Clean text for PDF (removes math symbols FPDF can't handle)
                 clean_text = edited_text.encode('latin-1', 'replace').decode('latin-1')
