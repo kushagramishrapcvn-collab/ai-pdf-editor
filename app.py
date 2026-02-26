@@ -9,7 +9,7 @@ import os
 pdf = FPDF()
 
 # Get the path to the font file in the current directory
-font_path = os.path.join(os.getcwd(), "DejaVuSans.ttf")
+font_path = os.path.join(os.getcwd(), "DejaVuSans-Bold.ttf")
 
 if os.path.exists(font_path):
     pdf.add_font("DejaVu", "", font_path)
