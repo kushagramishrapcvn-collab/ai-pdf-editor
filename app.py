@@ -37,8 +37,7 @@ if st.button("Process & Edit PDF"):
     },
     contents=f"Document Content: {original_text}\n\nTask: {user_command}"
 )
-                )
-                edited_text = response.text
+                 edited_text = response.text
 
                 st.subheader("AI Preview (Human Language)")
                 st.markdown(edited_text) # This shows bold, tables, and math nicely!
