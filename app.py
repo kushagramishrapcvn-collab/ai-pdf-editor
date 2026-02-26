@@ -36,20 +36,23 @@ if st.button("Process & Edit PDF"):
                 )
                 edited_text = response.text
 
-                # 3. Create PDF
+                 # 3. Create New PDF
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", size=12)
+                
+                # Clean text for PDF (Removes characters that FPDF doesn't like)
                 clean_text = edited_text.encode('latin-1', 'replace').decode('latin-1')
                 pdf.multi_cell(0, 10, clean_text)
                 
-                pdf_output = pdf.output(dest='S').encode('latin-1')
+                # GET THE BYTES DIRECTLY
+                pdf_bytes = pdf.output() 
                 
-                st.success("Analysis Complete!")
+                st.success("Done! Your edited PDF is ready.")
                 st.download_button(
-                    label="Download Result",
-                    data=pdf_output,
-                    file_name="ai_edited_math_notes.pdf",
+                    label="Download Edited PDF",
+                    data=pdf_bytes, # Use the bytes directly here
+                    file_name="edited_document.pdf",
                     mime="application/pdf"
                 )
             except Exception as e:
