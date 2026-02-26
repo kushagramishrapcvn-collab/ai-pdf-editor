@@ -86,7 +86,7 @@ if st.button("Apply Changes & Keep Format"):
                             replacement, 
                             fontsize=10, 
                             fontname="helv", 
-                            color=(0, 0, 0)
+                            color=(0, 0, 0))
                         )
             if found:
                 output_path = "symmetry_fixed.pdf"
