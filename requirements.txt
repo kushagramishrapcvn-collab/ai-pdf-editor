@@ -1,4 +1,4 @@
 google-genai
 pypdf
-fpdf2
+pymupdf
 streamlit
