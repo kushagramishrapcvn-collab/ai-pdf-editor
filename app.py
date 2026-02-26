@@ -63,7 +63,7 @@ if st.button("Apply Changes & Keep Format"):
 
                         # 4. INSERT TEXTBOX (This handles the wrapping!)
                         page.insert_textbox(
-                            wrap_box= fitz.Rect(inst.x0, inst.y0, inst.x1 + 20, inst.y1 + 2) 
+                            wrap_box,, 
                             # 1. Ask AI for replacement
                         response = client.models.generate_content(
                             model='gemini-2.5-flash',
