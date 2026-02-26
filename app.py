@@ -12,7 +12,7 @@ st.markdown("Upload a PDF and tell the AI how to edit or summarize it.")
 # Enter your Google Gemini API Key here
 API_KEY = "AIzaSyB9jSkAQjZZm-UTyz0apVBtdShCwrT_YjQ"
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-3-flash')
 
 # --- 2. THE UI (The Website Part) ---
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
