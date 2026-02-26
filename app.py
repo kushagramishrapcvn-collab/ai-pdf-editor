@@ -38,7 +38,20 @@ if st.button("Process & Edit PDF"):
                 )
                 
                 edited_text = response.text
+import os
 
+# ... inside your 'try' block after creating the pdf object ...
+pdf = FPDF()
+
+# Get the path to the font file in the current directory
+font_path = os.path.join(os.getcwd(), "DejaVuSans.ttf")
+
+if os.path.exists(font_path):
+    pdf.add_font("DejaVu", "", font_path)
+    pdf.set_font("DejaVu", size=12)
+else:
+    st.error("Font file still missing on server! Using Arial fallback.")
+    pdf.set_font("Arial", size=12)
                 # 3. Live Preview (Looks great because the browser handles Unicode)
                 st.subheader("AI Analysis")
                 st.markdown(edited_text)
@@ -46,7 +59,7 @@ if st.button("Process & Edit PDF"):
                 # 4. Create PDF with Unicode Support
                 pdf = FPDF()
                 # Add this after pdf = FPDF()
-                pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
+                pdf.add_font('DejaVu', '', 'DejaVuSans-Bold.ttf', uni=True)
                 pdf.set_font('DejaVu', '', 12)
                 pdf.add_page()
                 
