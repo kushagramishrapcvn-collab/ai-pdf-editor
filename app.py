@@ -30,7 +30,6 @@ if st.button("Apply Changes & Keep Format"):
             found = False
 
             for page in doc:
-                # Search for the exact coordinates of the old text
                 text_instances = page.search_for(target_text)
                 
                 if text_instances:
@@ -43,17 +42,17 @@ if st.button("Apply Changes & Keep Format"):
                         )
                         replacement = response.text.strip()
 
-                        # 2. THE FIX: Make the box WIDER but keep the height TIGHT
-                        # This prevents numbers like '76' from wrapping vertically
-                        wrap_box = fitz.Rect(inst.x0, inst.y0, inst.x1 + 25, inst.y1 + 2)
-
-                        # 3. 'Whiten' the area
-                        page.add_redact_annot(wrap_box, fill=(1, 1, 1)) 
+                        # 2. STRICT WHITENING: Stays exactly within original bounds
+                        page.add_redact_annot(inst, fill=(1, 1, 1)) 
                         page.apply_redactions()
 
-                        # 4. Insert Text (Preserves symmetry and avoids the '6' falling below)
+                        # 3. ALIGNED INSERTION: 
+                        # We use inst.x0 (left) and inst.y1 (bottom) with a small offset
+                        # This 'pushes' the text down into the center of the whitened margin
+                        insertion_point = fitz.Point(inst.x0, inst.y1 - 2)
+
                         page.insert_text(
-                            inst.tl, 
+                            insertion_point, 
                             replacement, 
                             fontsize=10, 
                             fontname="helv", 
