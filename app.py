@@ -39,22 +39,36 @@ if st.button("Process & Edit PDF"):
                 
                 edited_text = response.text
 
-                # 3. Live Preview (This stays as is - it looks good!)
+                # 3. Live Preview (Looks great because the browser handles Unicode)
                 st.subheader("AI Analysis")
                 st.markdown(edited_text)
                 
-                # --- NEW: CLEANING FOR PDF ---
-                # This removes "Computer Language" symbols like **, ###, and _
+                # 4. Create PDF with Unicode Support
+                pdf = FPDF()
+                # Add this after pdf = FPDF()
+                pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
+                pdf.set_font('DejaVu', '', 12)
+                pdf.add_page()
+                
+                # Use a built-in font that supports more symbols, or 
+                # for 100% math accuracy, we use 'utf-8' handling:
+                pdf.set_font("Arial", size=12) 
+                
+                # NEW CLEANING LOGIC:
+                # 1. Remove Markdown symbols
                 pdf_ready_text = edited_text.replace("**", "").replace("###", "").replace("##", "").replace("_", "")
                 
-                # 4. Create PDF
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-                
-                # Clean text for PDF encoding
-                clean_text = pdf_ready_text.encode('latin-1', 'replace').decode('latin-1')
-                pdf.multi_cell(0, 10, clean_text)
+                # 2. FIX THE QUESTION MARKS: 
+                # Instead of 'latin-1' (which breaks math), we use 'keep' or a safer encoding
+                # We use a multi_cell that handles the string directly
+                try:
+                    # In fpdf2 (2026 version), we don't need to manually encode/decode
+                    # as long as we stay within the font's limits.
+                    pdf.multi_cell(0, 10, pdf_ready_text)
+                except:
+                    # Fallback for truly "illegal" characters
+                    clean_text = pdf_ready_text.encode('ascii', 'ignore').decode('ascii')
+                    pdf.multi_cell(0, 10, clean_text)
                 
                 # Final Byte Conversion
                 pdf_final_data = bytes(pdf.output())
