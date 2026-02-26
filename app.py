@@ -42,8 +42,7 @@ if st.button("Apply Changes & Keep Format"):
                             contents=f"Old text: '{target_text}'. Instruction: {new_instruction}. Return ONLY the replacement text."
                         )
                         replacement = response.text
-
-                        if text_instances:
+                    if text_instances:
                     found = True
                     for inst in text_instances:
                         # 1. Get AI Replacement
