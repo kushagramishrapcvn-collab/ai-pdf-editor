@@ -39,21 +39,25 @@ if st.button("Process & Edit PDF"):
                 
                 edited_text = response.text
 
+                # 3. Live Preview (This stays as is - it looks good!)
                 st.subheader("AI Analysis")
                 st.markdown(edited_text)
+                
+                # --- NEW: CLEANING FOR PDF ---
+                # This removes "Computer Language" symbols like **, ###, and _
+                pdf_ready_text = edited_text.replace("**", "").replace("###", "").replace("##", "").replace("_", "")
                 
                 # 4. Create PDF
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", size=12)
-                # ... (rest of the code)
                 
-                # Clean text for PDF (removes math symbols FPDF can't handle)
-                clean_text = edited_text.encode('latin-1', 'replace').decode('latin-1')
+                # Clean text for PDF encoding
+                clean_text = pdf_ready_text.encode('latin-1', 'replace').decode('latin-1')
                 pdf.multi_cell(0, 10, clean_text)
                 
-                # CONVERSION STEP: This turns the bytearray into stable bytes
-                pdf_final_data = bytes(pdf.output()) 
+                # Final Byte Conversion
+                pdf_final_data = bytes(pdf.output())
                 
                 st.success("Successfully processed!")
                 st.download_button(
