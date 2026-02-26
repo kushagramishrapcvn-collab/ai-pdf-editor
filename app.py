@@ -10,7 +10,7 @@ st.title("📄 AI PDF Editor")
 st.markdown("Upload a PDF and tell the AI how to edit or summarize it.")
 
 # Enter your Google Gemini API Key here
-API_KEY = "YOUR_GEMINI_API_KEY_HERE"
+API_KEY = "AIzaSyB9jSkAQjZZm-UTyz0apVBtdShCwrT_YjQ"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-pro')
 
