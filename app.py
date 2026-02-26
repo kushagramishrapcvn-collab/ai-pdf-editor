@@ -63,7 +63,7 @@ if st.button("Apply Changes & Keep Format"):
 
                         # 4. INSERT TEXTBOX (This handles the wrapping!)
                         page.insert_textbox(
-                            ,wrap_box,
+                            wrap_box,
                             # 1. Ask AI for replacement
                         response = client.models.generate_content(
                             model='gemini-2.5-flash',
