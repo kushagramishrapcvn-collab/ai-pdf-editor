@@ -43,14 +43,34 @@ if st.button("Apply Changes & Keep Format"):
                         )
                         replacement = response.text
 
-                        # 2. 'Whiten' out the old text (Redaction)
-                        page.add_redact_annot(inst, fill=(1, 1, 1)) 
+                        if text_instances:
+                    found = True
+                    for inst in text_instances:
+                        # 1. Get AI Replacement
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=f"Old text: '{target_text}'. Instruction: {new_instruction}. Return ONLY the replacement text."
+                        )
+                        replacement = response.text
+
+                        # 2. CREATE A BOX (Extend the height slightly to allow for wrapping)
+                        # inst is the rectangle of the OLD text. 
+                        # We make it 50 pixels taller so the 'Human Language' can wrap.
+                        wrap_box = fitz.Rect(inst.x0, inst.y0, inst.x1, inst.y1 + 50)
+
+                        # 3. 'Whiten' the area
+                        page.add_redact_annot(wrap_box, fill=(1, 1, 1)) 
                         page.apply_redactions()
 
-                        # 3. Insert new text at the EXACT same starting point (inst.tl)
-                        # This keeps the symmetry perfect
-                        page.insert_text(inst.tl, replacement, fontsize=10, color=(0, 0, 0))
-
+                        # 4. INSERT TEXTBOX (This handles the wrapping!)
+                        page.insert_textbox(
+                            wrap_box, 
+                            replacement, 
+                            fontsize=10, 
+                            fontname="helv", 
+                            align=0, # 0 = Left align
+                            color=(0, 0, 0)
+                        )
             if found:
                 output_path = "symmetry_fixed.pdf"
                 doc.save(output_path)
