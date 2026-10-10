@@ -16,17 +16,17 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "afterparty_luxury_secret_key_999")
 
 DB_FILE = os.environ.get("DB_PATH", "afterparty_database.db")
-HOST_EMAIL = os.environ.get("HOST_EMAIL", "kushagramishra.pcvn@gmail.com")
+HOST_EMAIL = os.environ.get("HOST_EMAIL", "kushagramishra.pcvn@gmail.com").strip()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "afterpartyadmin")
 
-# Gmail SMTP Configuration for Automated Ticket Emails
+# Gmail SMTP Configuration
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", HOST_EMAIL)
-SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "").strip()
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", HOST_EMAIL).strip()
+RAW_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
+SENDER_PASSWORD = re.sub(r"\s+", "", RAW_PASSWORD).strip()
 
 # ==============================================================================
-# 2. SQL DATABASE INITIALIZATION (SQLite - Zero Spreadsheets)
+# 2. SQL DATABASE INITIALIZATION
 # ==============================================================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -53,45 +53,47 @@ def get_db():
     return conn
 
 # ==============================================================================
-# 3. ASYNCHRONOUS EMAIL SENDER (Zero Lag - Runs in Background Thread)
+# 3. BACKGROUND EMAIL DISPATCH (Silent & Non-Blocking)
 # ==============================================================================
 def _send_email_worker(to_email, subject, html_content):
     if not SENDER_PASSWORD:
-        print("⚠️ Notice: SENDER_PASSWORD is not set in Railway. Email skipped.")
         return
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"Afterparty Host <{SENDER_EMAIL}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(html_content, "html"))
+
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"Afterparty Host <{SENDER_EMAIL}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html_content, "html"))
-        
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
-            server.starttls()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        print(f"✅ Async email successfully sent to {to_email}")
-    except Exception as e:
-        print(f"❌ Async email failed to {to_email}: {e}")
+    except Exception:
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+                server.starttls()
+                server.login(SENDER_EMAIL, SENDER_PASSWORD)
+                server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        except Exception as e:
+            print(f"SMTP error: {e}")
 
 def async_send_email(to_email, subject, html_content):
-    """Fires email in a background daemon thread so the web UI responds instantly."""
     t = threading.Thread(target=_send_email_worker, args=(to_email, subject, html_content), daemon=True)
     t.start()
 
 def notify_host_new_guest(name, phone, email):
-    subject = f"🎉 New Registration Pending Approval: {name}"
+    subject = f"🎉 New Registration: {name}"
     html = f"""
     <div style="font-family: sans-serif; background-color: #0b132b; color: #ffffff; padding: 25px; border-radius: 12px;">
-      <h3 style="color: #f59e0b;">New Afterparty Registration Request</h3>
-      <p>A new guest has applied to attend:</p>
+      <h3 style="color: #f59e0b;">New Afterparty Registration</h3>
+      <p>A new guest has applied:</p>
       <ul>
-          <li><b>Name (As per ID):</b> {name}</li>
-          <li><b>Mobile Number:</b> {phone}</li>
-          <li><b>Gmail ID:</b> {email}</li>
+          <li><b>Name:</b> {name}</li>
+          <li><b>Mobile:</b> {phone}</li>
+          <li><b>Gmail:</b> {email}</li>
           <li><b>Status:</b> Pending Approval</li>
       </ul>
-      <p>Log in to your private host backend (<code>/admin</code>) to review and approve.</p>
+      <p>Log in to <code>/admin</code> to review and approve.</p>
     </div>
     """
     async_send_email(HOST_EMAIL, subject, html)
@@ -103,25 +105,21 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
     html = f"""
     <!DOCTYPE html>
     <html>
-    <head>
-      <meta charset="utf-8">
-      <title>VIP Ticket</title>
-    </head>
+    <head><meta charset="utf-8"></head>
     <body style="margin: 0; padding: 30px 10px; background-color: #060b18; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 480px; background-color: #0f1c3f; border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.85);">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 480px; background-color: #0f1c3f; border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 20px; overflow: hidden;">
         <tr>
           <td align="center" style="background: linear-gradient(135deg, #0b1536 0%, #1e3a8a 100%); padding: 32px 24px; border-bottom: 2px solid #d4af37;">
             <div style="display: inline-block; background-color: rgba(212, 175, 55, 0.15); border: 1px solid #d4af37; padding: 5px 14px; border-radius: 100px; font-size: 11px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #fde68a; margin-bottom: 10px;">
               ★ OFFICIAL VIP PASS ★
             </div>
-            <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em;">EXCLUSIVE AFTERPARTY</h1>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff;">EXCLUSIVE AFTERPARTY</h1>
             <p style="margin: 6px 0 0 0; font-size: 13px; color: #cbd5e1;">Pass Code: <b style="color: #fde68a;">{ticket_code}</b></p>
           </td>
         </tr>
-
         <tr>
           <td align="center" style="padding: 32px 24px 20px 24px;">
-            <div style="background-color: #ffffff; padding: 14px; border-radius: 16px; display: inline-block; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+            <div style="background-color: #ffffff; padding: 14px; border-radius: 16px; display: inline-block;">
               <img src="{qr_img_url}" width="200" height="200" alt="VIP Entry QR Code" style="display: block; border: 0; border-radius: 8px;">
             </div>
             <p style="margin: 14px 0 0 0; color: #f59e0b; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">
@@ -129,7 +127,6 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
             </p>
           </td>
         </tr>
-
         <tr>
           <td style="padding: 0 24px 24px 24px;">
             <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #081026; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; color: #ffffff; font-size: 13.5px;">
@@ -148,14 +145,13 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
             </table>
           </td>
         </tr>
-
         <tr>
           <td style="padding: 0 24px 30px 24px; text-align: center;">
             <p style="margin: 0 0 20px 0; color: #cbd5e1; font-size: 12.5px; line-height: 1.5;">
               ⚠️ <b>Door Policy:</b> Carry your physical government ID matching <b>"{name}"</b> for entry verification.
             </p>
             <a href="{pass_url}" style="display: inline-block; background: linear-gradient(135deg, #d4af37, #f59e0b); color: #060b18; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 13.5px;">
-              View Digital Web Pass
+              Open Digital Web Pass
             </a>
           </td>
         </tr>
@@ -166,7 +162,7 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
     async_send_email(guest_email, subject, html)
 
 # ==============================================================================
-# 4. HIGH-PERFORMANCE WARM LUXURY TEMPLATES
+# 4. TEMPLATES (LUXURY GOLD & MIDNIGHT NAVY)
 # ==============================================================================
 
 GUEST_PAGE_HTML = """<!DOCTYPE html>
@@ -218,10 +214,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
     .card::before {
       content: "";
       position: absolute;
-      top: 0;
-      left: 15%;
-      right: 15%;
-      height: 2px;
+      top: 0; left: 15%; right: 15%; height: 2px;
       background: linear-gradient(90deg, transparent, #d4af37, transparent);
     }
     .badge-bar { text-align: center; margin-bottom: 14px; }
@@ -240,21 +233,8 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       color: var(--gold-light);
     }
     .badge-dot { width: 6px; height: 6px; background: var(--gold-primary); border-radius: 50%; box-shadow: 0 0 8px var(--gold-primary); }
-    h1 {
-      font-size: 27px;
-      font-weight: 800;
-      text-align: center;
-      color: var(--text-white);
-      margin-bottom: 8px;
-      letter-spacing: -0.01em;
-    }
-    .subtitle {
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 13.5px;
-      line-height: 1.5;
-      margin-bottom: 24px;
-    }
+    h1 { font-size: 27px; font-weight: 800; text-align: center; color: var(--text-white); margin-bottom: 8px; }
+    .subtitle { text-align: center; color: var(--text-muted); font-size: 13.5px; line-height: 1.5; margin-bottom: 24px; }
     .policy-box {
       background: rgba(8, 16, 38, 0.8);
       border: 1px solid rgba(212, 175, 55, 0.25);
@@ -263,9 +243,6 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       margin-bottom: 22px;
       font-size: 12px;
       color: #fde68a;
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
     .form-group { margin-bottom: 18px; }
     label { display: block; font-size: 13px; font-weight: 600; color: var(--text-ivory); margin-bottom: 7px; }
@@ -279,12 +256,8 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       color: var(--text-white);
       font-size: 14.5px;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    input:focus {
-      border-color: var(--gold-primary);
-      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
-    }
+    input:focus { border-color: var(--gold-primary); box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2); }
     .btn-submit {
       width: 100%;
       padding: 15px;
@@ -297,12 +270,9 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       letter-spacing: 0.04em;
       cursor: pointer;
       margin-top: 10px;
-      transition: transform 0.15s, filter 0.15s;
       box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
     }
-    .btn-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
-    .btn-submit:active { transform: translateY(0); }
-    .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-submit:hover { filter: brightness(1.08); }
     .alert { padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 18px; display: none; line-height: 1.5; }
     .alert-error { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; }
     .result-card {
@@ -329,7 +299,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       <p class="subtitle">Enter your official credentials. Submissions are individually verified and approved by the host.</p>
       
       <div class="policy-box">
-        <span>🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate Mobile Numbers or Gmail IDs are automatically rejected.</span>
+        🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate Mobile Numbers or Gmail IDs are automatically rejected.
       </div>
 
       <div id="alertBox" class="alert"></div>
@@ -353,7 +323,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
 
     <div id="successSection" style="display:none; text-align:center;">
       <h2 style="font-size:22px; margin-bottom:8px; color:#fff;">Request Submitted</h2>
-      <p style="color:#94a3b8; font-size:13.5px; margin-bottom:20px;">Your details are locked in the database and submitted for host approval.</p>
+      <p style="color:#94a3b8; font-size:13.5px; margin-bottom:20px;">Your details are recorded in the database and submitted for host review.</p>
       
       <div class="result-card">
         <div class="result-row"><span style="color:#94a3b8;">Status</span><span class="tag-pending">Pending Approval</span></div>
@@ -435,9 +405,6 @@ PASS_PAGE_HTML = """<!DOCTYPE html>
     body {
       min-height: 100vh;
       background: var(--bg);
-      background-image: 
-        radial-gradient(circle at 50% 0%, rgba(30, 58, 138, 0.4) 0%, transparent 60%),
-        radial-gradient(circle at 50% 100%, rgba(212, 175, 55, 0.1) 0%, transparent 50%);
       color: var(--white);
       font-family: var(--font);
       display: flex;
@@ -638,7 +605,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .kpi-card.rejected { border-left: 4px solid var(--danger); }
     .kpi-title { font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; font-weight: 700; }
     .kpi-val { font-size: 32px; font-weight: 800; color: #fff; margin-top: 6px; }
-    .controls { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .controls { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
     .filter-btn { background: var(--panel); border: 1px solid rgba(255,255,255,0.1); color: var(--muted); padding: 8px 16px; border-radius: 8px; cursor: pointer; text-decoration: none; font-size: 13px; font-weight: 600; }
     .filter-btn.active { background: #d4af37; color: #060b18; font-weight: 800; }
     .alert-banner { padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; font-size: 13.5px; }
@@ -680,12 +647,6 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         {% endfor %}
       {% endif %}
     {% endwith %}
-
-    {% if not smtp_configured %}
-      <div class="alert-banner warning">
-        ⚠️ <b>Gmail SMTP is not configured yet!</b> Set the <code>SENDER_PASSWORD</code> environment variable in Railway to enable automatic email dispatch. (Approvals will still work and unlock web QR passes).
-      </div>
-    {% endif %}
 
     <div class="kpi-grid">
       <div class="kpi-card total">
@@ -821,7 +782,6 @@ def register():
     conn = get_db()
     cursor = conn.cursor()
 
-    # SQL duplicate check
     cursor.execute("SELECT id FROM guests WHERE phone = ? OR email = ?", (phone, email))
     existing = cursor.fetchone()
 
@@ -844,9 +804,7 @@ def register():
     conn.commit()
     conn.close()
 
-    # Fast async host alert (non-blocking)
     notify_host_new_guest(name, phone, email)
-
     return jsonify({"success": True, "message": "Registration submitted successfully."})
 
 # Digital VIP Pass with Scannable QR Code
@@ -866,7 +824,7 @@ def view_pass(guest_id):
 
     return render_template_string(PASS_PAGE_HTML, guest=guest, verify_url=verify_url)
 
-# Door Verification Endpoint (Triggered when bouncer scans the QR code)
+# Door Verification Endpoint
 @app.route("/verify/<int:guest_id>")
 def verify_door(guest_id):
     conn = get_db()
@@ -877,7 +835,7 @@ def verify_door(guest_id):
 
     return render_template_string(VERIFY_PAGE_HTML, guest=guest)
 
-# Separate Host Backend
+# Separate Host Backend (Clean, No Permanent Warning Banners)
 @app.route("/admin")
 def admin():
     if not session.get("is_admin"):
@@ -933,7 +891,7 @@ def admin_logout():
     session.pop("is_admin", None)
     return redirect(url_for("admin_login"))
 
-# Host Approval Action: Sends Email with QR Code in background
+# Host Approval Action
 @app.route("/admin/action/<int:guest_id>/<string:new_status>")
 def admin_action(guest_id, new_status):
     if not session.get("is_admin"):
@@ -953,7 +911,6 @@ def admin_action(guest_id, new_status):
                 base_url = request.host_url.rstrip("/")
                 verify_url = f"{base_url}/verify/{guest_id}"
                 pass_url = f"{base_url}/pass/{guest_id}"
-                # Non-blocking async email dispatch (Instant page redirect)
                 notify_guest_approved(
                     guest["name"], 
                     guest["email"], 
@@ -961,7 +918,7 @@ def admin_action(guest_id, new_status):
                     pass_url, 
                     guest["ticket_code"]
                 )
-                flash(f"✅ Approved {guest['name']}! VIP ticket with QR Code is being emailed to {guest['email']}.", "success")
+                flash(f"✅ Approved {guest['name']}! VIP ticket with QR Code is being sent to {guest['email']}.", "success")
             else:
                 flash(f"Status for {guest['name']} updated to Rejected.", "warning")
         conn.close()
