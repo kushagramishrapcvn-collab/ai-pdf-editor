@@ -53,11 +53,12 @@ def get_db():
     return conn
 
 # ==============================================================================
-# 3. BACKGROUND EMAIL DISPATCH (Silent & Non-Blocking)
+# 3. DIRECT & ASYNCHRONOUS EMAIL SENDER
 # ==============================================================================
-def _send_email_worker(to_email, subject, html_content):
+def send_email_direct(to_email, subject, html_content):
     if not SENDER_PASSWORD:
-        return
+        return False, "SENDER_PASSWORD variable Railway me khali hai."
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"Afterparty Host <{SENDER_EMAIL}>"
@@ -65,21 +66,25 @@ def _send_email_worker(to_email, subject, html_content):
     msg.attach(MIMEText(html_content, "html"))
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-    except Exception:
+        return True, "Success via Port 465 SSL"
+    except Exception as e_ssl:
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
                 server.starttls()
                 server.login(SENDER_EMAIL, SENDER_PASSWORD)
                 server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        except Exception as e:
-            print(f"SMTP error: {e}")
+            return True, "Success via Port 587 STARTTLS"
+        except Exception as e_tls:
+            return False, f"SSL Error: {e_ssl} | STARTTLS Error: {e_tls}"
 
 def async_send_email(to_email, subject, html_content):
-    t = threading.Thread(target=_send_email_worker, args=(to_email, subject, html_content), daemon=True)
-    t.start()
+    def worker():
+        ok, msg = send_email_direct(to_email, subject, html_content)
+        print(f"[{'SUCCESS' if ok else 'FAILURE'}] Sending email to {to_email}: {msg}")
+    threading.Thread(target=worker, daemon=True).start()
 
 def notify_host_new_guest(name, phone, email):
     subject = f"🎉 New Registration: {name}"
@@ -162,7 +167,7 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
     async_send_email(guest_email, subject, html)
 
 # ==============================================================================
-# 4. TEMPLATES (LUXURY GOLD & MIDNIGHT NAVY)
+# 4. TEMPLATES (LUXURY GOLD & MIDNIGHT NAVY - ZERO CLUTTER)
 # ==============================================================================
 
 GUEST_PAGE_HTML = """<!DOCTYPE html>
@@ -759,12 +764,10 @@ LOGIN_PAGE_HTML = """<!DOCTYPE html>
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
 
-# Public Guest Form
 @app.route("/")
 def index():
     return render_template_string(GUEST_PAGE_HTML)
 
-# Registration API
 @app.route("/api/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
@@ -807,7 +810,6 @@ def register():
     notify_host_new_guest(name, phone, email)
     return jsonify({"success": True, "message": "Registration submitted successfully."})
 
-# Digital VIP Pass with Scannable QR Code
 @app.route("/pass/<int:guest_id>")
 def view_pass(guest_id):
     conn = get_db()
@@ -824,7 +826,6 @@ def view_pass(guest_id):
 
     return render_template_string(PASS_PAGE_HTML, guest=guest, verify_url=verify_url)
 
-# Door Verification Endpoint
 @app.route("/verify/<int:guest_id>")
 def verify_door(guest_id):
     conn = get_db()
@@ -835,7 +836,6 @@ def verify_door(guest_id):
 
     return render_template_string(VERIFY_PAGE_HTML, guest=guest)
 
-# Separate Host Backend (Clean, No Permanent Warning Banners)
 @app.route("/admin")
 def admin():
     if not session.get("is_admin"):
@@ -875,6 +875,24 @@ def admin():
         current_status=status_filter
     )
 
+# Direct Diagnostics Route (Check in browser tab)
+@app.route("/test-mail")
+def test_mail_diagnose():
+    target = request.args.get("to", SENDER_EMAIL)
+    subject = "🧪 Test Diagnostic Email"
+    html = "<h3>✅ Your Railway email setup is working!</h3>"
+    
+    ok, message = send_email_direct(target, subject, html)
+    
+    return jsonify({
+        "status": "SUCCESS" if ok else "FAILED",
+        "sender_email": SENDER_EMAIL,
+        "recipient": target,
+        "has_password": bool(SENDER_PASSWORD),
+        "password_length": len(SENDER_PASSWORD),
+        "detail": message
+    })
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     error = None
@@ -891,7 +909,6 @@ def admin_logout():
     session.pop("is_admin", None)
     return redirect(url_for("admin_login"))
 
-# Host Approval Action
 @app.route("/admin/action/<int:guest_id>/<string:new_status>")
 def admin_action(guest_id, new_status):
     if not session.get("is_admin"):
