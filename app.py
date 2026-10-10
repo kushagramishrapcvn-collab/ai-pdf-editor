@@ -33,7 +33,21 @@ RAW_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 SENDER_PASSWORD = re.sub(r"\s+", "", RAW_PASSWORD).strip()
 
 # ==============================================================================
-# 2. SQL DATABASE INITIALIZATION
+# 2. TEMPLATE FILTERS & HELPERS
+# ==============================================================================
+@app.template_filter('whatsapp_phone')
+def whatsapp_phone_filter(phone):
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 10:
+        return "91" + digits
+    return digits
+
+@app.template_filter('urlencode')
+def urlencode_filter(s):
+    return urllib.parse.quote_plus(str(s or ""))
+
+# ==============================================================================
+# 3. SQL DATABASE INITIALIZATION
 # ==============================================================================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -60,7 +74,7 @@ def get_db():
     return conn
 
 # ==============================================================================
-# 3. DIRECT & ASYNCHRONOUS EMAIL SENDER (RESEND API + SMTP FALLBACK)
+# 4. DIRECT & ASYNCHRONOUS EMAIL SENDER (RESEND API + SMTP FALLBACK)
 # ==============================================================================
 def send_via_resend(to_email, subject, html_content):
     if not RESEND_API_KEY:
@@ -153,7 +167,7 @@ def notify_host_new_guest(name, phone, email):
       <p>A new guest has applied:</p>
       <ul>
           <li><b>Name:</b> {name}</li>
-          <li><b>Mobile:</b> {phone}</li>
+          <li><b>WhatsApp:</b> {phone}</li>
           <li><b>Gmail:</b> {email}</li>
           <li><b>Status:</b> Pending Approval</li>
       </ul>
@@ -226,7 +240,7 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
     async_send_email(guest_email, subject, html)
 
 # ==============================================================================
-# 4. TEMPLATES (LUXURY GOLD & MIDNIGHT NAVY - ZERO CLUTTER)
+# 5. TEMPLATES (LUXURY GOLD & MIDNIGHT NAVY - ORIGINAL PENDING CARD DESIGN)
 # ==============================================================================
 
 GUEST_PAGE_HTML = """<!DOCTYPE html>
@@ -278,118 +292,105 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
     .card::before {
       content: "";
       position: absolute;
-      top: 0; left: 0; right: 0; height: 3px;
-      background: var(--gold-gradient);
-      border-radius: 22px 22px 0 0;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #d4af37, transparent);
     }
+    .badge-bar { text-align: center; margin-bottom: 14px; }
     .badge {
-      display: inline-block;
-      background: rgba(212, 175, 55, 0.15);
-      border: 1px solid rgba(212, 175, 55, 0.5);
-      color: var(--gold-light);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      border-radius: 100px;
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.15em;
       text-transform: uppercase;
-      padding: 5px 14px;
-      border-radius: 100px;
-      margin-bottom: 16px;
+      color: var(--gold-light);
     }
+    .badge-dot { width: 6px; height: 6px; background: var(--gold-primary); border-radius: 50%; box-shadow: 0 0 8px var(--gold-primary); }
     h1 {
-      font-size: 26px;
+      font-size: 27px;
       font-weight: 800;
+      text-align: center;
       color: var(--text-white);
-      letter-spacing: -0.02em;
       margin-bottom: 8px;
+      letter-spacing: -0.01em;
     }
-    p.desc {
+    .subtitle {
+      text-align: center;
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13.5px;
       line-height: 1.5;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
-    .form-group {
-      margin-bottom: 20px;
-      text-align: left;
+    .policy-box {
+      background: rgba(8, 16, 38, 0.8);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      border-radius: 10px;
+      padding: 11px 14px;
+      margin-bottom: 22px;
+      font-size: 12px;
+      color: #fde68a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 700;
-      color: #e2e8f0;
-      margin-bottom: 8px;
-      letter-spacing: 0.02em;
-    }
-    label span.req { color: #f59e0b; margin-left: 2px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--text-ivory); margin-bottom: 7px; }
+    .label-hint { font-weight: 400; color: var(--text-muted); font-size: 11.5px; }
     input {
       width: 100%;
       background: var(--input-bg);
       border: 1px solid var(--input-border);
-      border-radius: 12px;
-      padding: 14px 16px;
-      color: #fff;
-      font-size: 15px;
+      border-radius: 11px;
+      padding: 13px 16px;
+      color: var(--text-white);
+      font-size: 14.5px;
       outline: none;
-      transition: all 0.2s ease;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     input:focus {
       border-color: var(--gold-primary);
       box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
-      background: #0b1536;
-    }
-    .hint {
-      font-size: 11.5px;
-      color: var(--text-muted);
-      margin-top: 5px;
-      display: block;
-    }
-    .id-notice {
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px dashed rgba(245, 158, 11, 0.4);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 24px;
-      font-size: 12.5px;
-      color: #fde68a;
-      line-height: 1.45;
     }
     .btn-submit {
       width: 100%;
+      padding: 15px;
       background: var(--gold-gradient);
-      color: #060b18;
       border: none;
-      padding: 16px;
       border-radius: 12px;
+      color: #060b18;
       font-size: 15.5px;
       font-weight: 800;
       letter-spacing: 0.04em;
-      text-transform: uppercase;
       cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.15s, filter 0.15s;
       box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
-      transition: all 0.2s;
     }
-    .btn-submit:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 14px 30px rgba(212, 175, 55, 0.45);
-    }
-    .feedback {
-      margin-top: 20px;
-      padding: 14px;
-      border-radius: 12px;
+    .btn-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-submit:active { transform: translateY(0); }
+    .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+    .alert { padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 18px; display: none; line-height: 1.5; }
+    .alert-error { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; }
+    .result-card {
+      background: #081026;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px;
+      margin: 20px 0;
+      text-align: left;
       font-size: 13.5px;
-      display: none;
-      line-height: 1.5;
     }
-    .feedback.error {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid var(--danger);
-      color: #fca5a5;
-    }
-    .feedback.success {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid #10b981;
-      color: #6ee7b7;
-    }
+    .result-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .result-row:last-child { border-bottom: none; }
+    .tag-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 3px 12px; border-radius: 100px; font-size: 11.5px; font-weight: 800; border: 1px solid rgba(245, 158, 11, 0.4); }
     footer {
       margin-top: 24px;
       text-align: center;
@@ -401,84 +402,126 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <div class="badge">Official Access</div>
-    <h1>Exclusive Afterparty</h1>
-    <p class="desc">Private VIP Guest List. Entry strictly by invitation and official ID verification.</p>
+    <div id="formSection">
+      <div class="badge-bar">
+        <span class="badge"><span class="badge-dot"></span>VIP Guestlist Registration</span>
+      </div>
+      <h1>Afterparty Registration</h1>
+      <p class="subtitle">Enter your official credentials. Submissions are individually verified and approved by the host.</p>
+      
+      <div class="policy-box">
+        <span>🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate Mobile Numbers or Gmail IDs are automatically rejected.</span>
+      </div>
 
-    <div class="id-notice">
-      <b>⚠️ Door Policy Notice:</b> Your name must match your official government ID (Aadhaar / Driving License / Passport) exactly.
+      <div id="alertBox" class="alert"></div>
+
+      <form id="regForm">
+        <div class="form-group">
+          <label>Name <span class="label-hint">(As on your Official ID)</span></label>
+          <input type="text" id="name" placeholder="e.g. Kushagra Mishra" required autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label>WhatsApp Number <span class="label-hint">(VIP Pass with QR Code will be sent here)</span></label>
+          <input type="tel" id="phone" placeholder="e.g. 9876543210" required autocomplete="tel">
+        </div>
+        <div class="form-group">
+          <label>Gmail ID <span class="label-hint">(Registration record)</span></label>
+          <input type="email" id="email" placeholder="e.g. yourname@gmail.com" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn-submit" id="submitBtn">Request VIP Access</button>
+      </form>
+
+      <footer>
+        Host backstage portal &bull; <a href="/admin">Host Login</a>
+      </footer>
     </div>
 
-    <form id="regForm">
-      <div class="form-group">
-        <label>Full Name (As on Official ID)<span class="req">*</span></label>
-        <input type="text" id="name" name="name" placeholder="e.g. Kushagra Mishra" required autocomplete="name">
-        <span class="hint">Will be checked at the door against your physical ID.</span>
+    <!-- SUCCESS / PENDING STATUS SCREEN (AS REQUESTED) -->
+    <div id="successSection" style="display:none; text-align:center;">
+      <div style="width: 58px; height: 58px; margin: 0 auto 16px auto; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
+        ⏳
+      </div>
+      <h2 style="font-size:23px; font-weight:800; margin-bottom:8px; color:#fff;">Request Submitted!</h2>
+      <p style="color:#94a3b8; font-size:13.5px; margin-bottom:18px;">Your application has been locked in the guestlist and submitted to the host for review.</p>
+      
+      <div class="result-card">
+        <div class="result-row">
+          <span style="color:#94a3b8;">Status</span>
+          <span class="tag-pending">Pending Approval</span>
+        </div>
+        <div class="result-row">
+          <span style="color:#94a3b8;">Pass Code</span>
+          <span style="font-weight:700; color:#fde68a;" id="resTicket">-</span>
+        </div>
+        <div class="result-row">
+          <span style="color:#94a3b8;">Name (As on ID)</span>
+          <span style="font-weight:700; color:#fff;" id="resName">-</span>
+        </div>
+        <div class="result-row">
+          <span style="color:#94a3b8;">WhatsApp Number</span>
+          <span style="font-weight:700; color:#fff;" id="resPhone">-</span>
+        </div>
+        <div class="result-row">
+          <span style="color:#94a3b8;">Gmail ID</span>
+          <span style="font-weight:600; color:#cbd5e1;" id="resEmail">-</span>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label>Mobile Number (WhatsApp)<span class="req">*</span></label>
-        <input type="tel" id="phone" name="phone" placeholder="e.g. +91 98765 43210" required autocomplete="tel">
-        <span class="hint">Used for 1-click VIP pass delivery and verification.</span>
+      <div style="background: rgba(37, 211, 102, 0.1); border: 1px solid rgba(37, 211, 102, 0.35); border-radius: 12px; padding: 13px 15px; margin-top: 18px; text-align: left;">
+        <p style="color: #6ee7b7; font-size: 13px; margin: 0; line-height: 1.5;">
+          📲 <b>WhatsApp Pass Delivery:</b> Once the host approves your entry, your official VIP ticket with scannable QR Code will be dispatched directly to your WhatsApp.
+        </p>
       </div>
 
-      <div class="form-group">
-        <label>Gmail ID<span class="req">*</span></label>
-        <input type="email" id="email" name="email" placeholder="name@gmail.com" required autocomplete="email">
-        <span class="hint">Your scannable QR Code VIP ticket will be emailed here upon host approval.</span>
-      </div>
-
-      <button type="submit" id="submitBtn" class="btn-submit">Submit for VIP Entry</button>
-    </form>
-
-    <div id="feedback" class="feedback"></div>
-
-    <footer>
-      Host backstage portal &bull; <a href="/admin">Host Login</a>
-    </footer>
+      <p style="font-size: 12px; color: #64748b; margin-top: 18px;">
+        ⚠️ Door Rule: Limit 1 request per person. Please carry physical government ID at the venue entrance.
+      </p>
+    </div>
   </div>
 
   <script>
     const form = document.getElementById('regForm');
-    const feedback = document.getElementById('feedback');
+    const alertBox = document.getElementById('alertBox');
     const submitBtn = document.getElementById('submitBtn');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Processing Application...';
-      feedback.style.display = 'none';
+      alertBox.style.display = 'none';
 
-      const payload = {
-        name: document.getElementById('name').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        email: document.getElementById('email').value.trim()
-      };
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const email = document.getElementById('email').value.trim();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
 
       try {
         const res = await fetch('/', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ name, phone, email })
         });
         const data = await res.json();
 
-        feedback.style.display = 'block';
-        if (data.status === 'success') {
-          feedback.className = 'feedback success';
-          feedback.innerHTML = `<b>🎉 Application Received!</b><br>${data.message}`;
-          form.reset();
+        if (data.status === 'success' || data.success) {
+          document.getElementById('formSection').style.display = 'none';
+          document.getElementById('resTicket').textContent = data.ticket_code || 'AP-PENDING';
+          document.getElementById('resName').textContent = name;
+          document.getElementById('resPhone').textContent = phone;
+          document.getElementById('resEmail').textContent = email;
+          document.getElementById('successSection').style.display = 'block';
         } else {
-          feedback.className = 'feedback error';
-          feedback.innerHTML = `<b>⚠️ Registration Notice</b><br>${data.message}`;
+          alertBox.className = 'alert alert-error';
+          alertBox.innerHTML = '<b>⚠️ Notice:</b> ' + (data.message || 'Error submitting registration.');
+          alertBox.style.display = 'block';
         }
       } catch (err) {
-        feedback.style.display = 'block';
-        feedback.className = 'feedback error';
-        feedback.innerHTML = '<b>Network Error:</b> Please check your connection and try again.';
+        alertBox.className = 'alert alert-error';
+        alertBox.textContent = 'Network error. Please try again.';
+        alertBox.style.display = 'block';
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit for VIP Entry';
+        submitBtn.textContent = 'Request VIP Access';
       }
     });
   </script>
@@ -595,7 +638,7 @@ PASS_PAGE_HTML = """<!DOCTYPE html>
           <td class="val">{{ guest.name }}</td>
         </tr>
         <tr>
-          <td class="label">Mobile Number</td>
+          <td class="label">WhatsApp Number</td>
           <td class="val">{{ guest.phone }}</td>
         </tr>
         <tr>
@@ -739,13 +782,15 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
     .btn-rej:hover { background: var(--danger); color: #fff; }
     .btn-view { background: rgba(212, 175, 55, 0.15); color: #fde68a; border: 1px solid var(--gold); }
     .btn-view:hover { background: var(--gold); color: #060b18; }
+    .btn-whatsapp { background: #25d366; color: #060b18; border: 1px solid #25d366; font-weight: 800; box-shadow: 0 2px 8px rgba(37,211,102,0.3); }
+    .btn-whatsapp:hover { background: #20ba59; }
   </style>
 </head>
 <body>
   <header>
     <div class="brand">
       <h1>🔒 Host Operations Backend</h1>
-      <p>Direct Database Review, Approvals & Automated QR Email Dispatch</p>
+      <p>Direct Database Review, Approvals & WhatsApp / QR Pass Distribution</p>
     </div>
     <div>
       <a href="/admin/logout" class="filter-btn">Log Out</a>
@@ -797,7 +842,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
         <tr>
           <th>Pass Code</th>
           <th>Name (As on ID)</th>
-          <th>Mobile Number</th>
+          <th>WhatsApp Number</th>
           <th>Gmail ID</th>
           <th>Registered At</th>
           <th>Status</th>
@@ -815,14 +860,14 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
           <td><span class="badge-status {{ guest.status }}">{{ guest.status }}</span></td>
           <td>
             {% if guest.status != 'Approved' %}
-              <a href="/admin/action/{{ guest.id }}/Approved" class="btn-act btn-app">Approve & Email QR</a>
+              <a href="/admin/action/{{ guest.id }}/Approved" class="btn-act btn-app">Approve</a>
             {% endif %}
             {% if guest.status != 'Rejected' %}
               <a href="/admin/action/{{ guest.id }}/Rejected" class="btn-act btn-rej">Reject</a>
             {% endif %}
             {% if guest.status == 'Approved' %}
-              <a href="/pass/{{ guest.id }}" target="_blank" class="btn-act btn-view">View QR Ticket</a>
-              <a href="https://wa.me/{{ guest.phone | replace('+', '') | replace(' ', '') }}?text=Hey%20{{ guest.name | urlencode }}!%20Your%20VIP%20Pass%20for%20the%20Exclusive%20Afterparty%20is%20approved.%20Access%20your%20QR%20Code%20Ticket%20here:%20{{ request.host_url.rstrip('/') }}/pass/{{ guest.id }}" target="_blank" class="btn-act" style="background: rgba(37, 211, 102, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">WhatsApp Pass</a>
+              <a href="/pass/{{ guest.id }}" target="_blank" class="btn-act btn-view">View QR</a>
+              <a href="https://api.whatsapp.com/send?phone={{ guest.phone | whatsapp_phone }}&text=Hey%20{{ guest.name | urlencode }}!%20%F0%9F%8E%89%20Your%20VIP%20Pass%20for%20the%20Exclusive%20Afterparty%20is%20APPROVED.%0A%0A%F0%9F%8E%9F%20Pass%20Code:%20{{ guest.ticket_code }}%0A%F0%9F%93%B2%20View%20%26%20Scan%20Your%20QR%20Pass:%20{{ request.host_url.rstrip('/') }}/pass/{{ guest.id }}%0A%0A%E2%9A%A0%EF%B8%8F%20Door%20Policy:%20Carry%20your%20physical%20government%20ID%20matching%20{{ guest.name | urlencode }}%20at%20entry." target="_blank" class="btn-act btn-whatsapp">📱 Send WhatsApp Pass</a>
             {% endif %}
           </td>
         </tr>
@@ -839,10 +884,11 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 """
 
 # ==============================================================================
-# 5. CONTROLLER ROUTES
+# 6. CONTROLLER ROUTES
 # ==============================================================================
 
 @app.route("/", methods=["GET", "POST"])
+@app.route("/api/register", methods=["POST"])
 def index():
     if request.method == "POST":
         data = request.get_json(silent=True) or request.form
@@ -851,7 +897,7 @@ def index():
         email = (data.get("email") or "").strip().lower()
 
         if not name or not phone or not email:
-            return jsonify({"status": "error", "message": "All fields (Name, Phone, Gmail) are strictly mandatory."}), 400
+            return jsonify({"status": "error", "success": False, "message": "All fields (Name, WhatsApp Number, Gmail ID) are strictly mandatory."}), 400
 
         # Duplicate checking
         conn = get_db()
@@ -864,7 +910,8 @@ def index():
             status = existing["status"]
             return jsonify({
                 "status": "error",
-                "message": f"This Mobile Number or Gmail ID is already registered (Current status: {status}). Duplicate entries are not allowed."
+                "success": False,
+                "message": f"This WhatsApp number or Gmail ID is already registered (Current status: {status}). Repeated submissions are not allowed."
             }), 409
 
         # Generate unique ticket pass identifier
@@ -884,7 +931,12 @@ def index():
 
         return jsonify({
             "status": "success",
-            "message": f"Your VIP access application has been recorded (Pass #{ticket_code}). Once the host approves your entry, your official scannable QR ticket will be delivered directly to {email}."
+            "success": True,
+            "ticket_code": ticket_code,
+            "name": name,
+            "phone": phone,
+            "email": email,
+            "message": f"Your VIP access application has been recorded (Pass #{ticket_code}). Once approved, your official QR ticket pass will be delivered to your WhatsApp ({phone})."
         })
 
     return render_template_string(GUEST_PAGE_HTML)
@@ -1030,7 +1082,7 @@ def admin_action(guest_id, new_status):
     if new_status in ["Approved", "Rejected"]:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT name, email, ticket_code FROM guests WHERE id = ?", (guest_id,))
+        cursor.execute("SELECT name, email, phone, ticket_code FROM guests WHERE id = ?", (guest_id,))
         guest = cursor.fetchone()
 
         if guest:
@@ -1048,7 +1100,7 @@ def admin_action(guest_id, new_status):
                     pass_url, 
                     guest["ticket_code"]
                 )
-                flash(f"✅ Approved {guest['name']}! VIP ticket with QR Code is being sent to {guest['email']}.", "success")
+                flash(f"✅ Approved {guest['name']}! Click '📱 Send WhatsApp Pass' to forward their ticket on WhatsApp.", "success")
             else:
                 flash(f"Status for {guest['name']} updated to Rejected.", "warning")
         conn.close()
@@ -1069,7 +1121,7 @@ def export_json():
     return jsonify(rows)
 
 # ==============================================================================
-# 6. RAILWAY PRODUCTION ENTRYPOINT
+# 7. RAILWAY PRODUCTION ENTRYPOINT
 # ==============================================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
