@@ -213,7 +213,7 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
                 <td align="right" style="border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 800; color: #34d399;">VERIFIED GUEST ✓</td>
               </tr>
               <tr>
-                <td style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Guest Name (ID)</td>
+                <td style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.06);">Guest Name</td>
                 <td align="right" style="border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 700; color: #ffffff;">{name}</td>
               </tr>
               <tr>
@@ -225,9 +225,6 @@ def notify_guest_approved(name, guest_email, verify_url, pass_url, ticket_code):
         </tr>
         <tr>
           <td style="padding: 0 24px 30px 24px; text-align: center;">
-            <p style="margin: 0 0 20px 0; color: #cbd5e1; font-size: 12.5px; line-height: 1.5;">
-              ⚠️ <b>Door Policy:</b> Carry your physical government ID matching <b>"{name}"</b> for entry verification.
-            </p>
             <a href="{pass_url}" style="display: inline-block; background: linear-gradient(135deg, #d4af37, #f59e0b); color: #060b18; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 13.5px;">
               Open Digital Web Pass
             </a>
@@ -407,18 +404,18 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
         <span class="badge"><span class="badge-dot"></span>VIP Guestlist Registration</span>
       </div>
       <h1>Afterparty Registration</h1>
-      <p class="subtitle">Enter your official credentials. Submissions are individually verified and approved by the host.</p>
+      <p class="subtitle">Enter your details below. Submissions are individually reviewed and approved by the host.</p>
       
       <div class="policy-box">
-        <span>🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate Mobile Numbers or Gmail IDs are automatically rejected.</span>
+        <span>🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate WhatsApp numbers or Gmail IDs are automatically blocked.</span>
       </div>
 
       <div id="alertBox" class="alert"></div>
 
       <form id="regForm">
         <div class="form-group">
-          <label>Name <span class="label-hint">(As on your Official ID)</span></label>
-          <input type="text" id="name" placeholder="e.g. Kushagra Mishra" required autocomplete="name">
+          <label>Full Name <span class="label-hint">(Guest Name)</span></label>
+          <input type="text" id="name" placeholder="e.g. Riya Sharma" required autocomplete="name">
         </div>
         <div class="form-group">
           <label>WhatsApp Number <span class="label-hint">(VIP Pass with QR Code will be sent here)</span></label>
@@ -436,7 +433,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       </footer>
     </div>
 
-    <!-- SUCCESS / PENDING STATUS SCREEN (AS REQUESTED) -->
+    <!-- SUCCESS / PENDING STATUS SCREEN -->
     <div id="successSection" style="display:none; text-align:center;">
       <div style="width: 58px; height: 58px; margin: 0 auto 16px auto; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
         ⏳
@@ -454,7 +451,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
           <span style="font-weight:700; color:#fde68a;" id="resTicket">-</span>
         </div>
         <div class="result-row">
-          <span style="color:#94a3b8;">Name (As on ID)</span>
+          <span style="color:#94a3b8;">Name</span>
           <span style="font-weight:700; color:#fff;" id="resName">-</span>
         </div>
         <div class="result-row">
@@ -474,7 +471,7 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
       </div>
 
       <p style="font-size: 12px; color: #64748b; margin-top: 18px;">
-        ⚠️ Door Rule: Limit 1 request per person. Please carry physical government ID at the venue entrance.
+        ⚠️ Door Rule: Limit 1 request per person. Duplicate entries are blocked.
       </p>
     </div>
   </div>
@@ -634,7 +631,7 @@ PASS_PAGE_HTML = """<!DOCTYPE html>
           <td class="val" style="color: #34d399;">VERIFIED GUEST ✓</td>
         </tr>
         <tr>
-          <td class="label">Guest Name (ID)</td>
+          <td class="label">Guest Name</td>
           <td class="val">{{ guest.name }}</td>
         </tr>
         <tr>
@@ -648,7 +645,7 @@ PASS_PAGE_HTML = """<!DOCTYPE html>
       </table>
 
       <p class="notice">
-        ⚠️ <b>Door Rule:</b> Show this QR Code and carry your physical ID matching "<b>{{ guest.name }}</b>" for entry.
+        ⚠️ <b>Door Rule:</b> Show this QR Code at the entrance for verification.
       </p>
     </div>
   </div>
@@ -841,7 +838,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
       <thead>
         <tr>
           <th>Pass Code</th>
-          <th>Name (As on ID)</th>
+          <th>Name</th>
           <th>WhatsApp Number</th>
           <th>Gmail ID</th>
           <th>Registered At</th>
@@ -867,7 +864,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
             {% endif %}
             {% if guest.status == 'Approved' %}
               <a href="/pass/{{ guest.id }}" target="_blank" class="btn-act btn-view">View QR</a>
-              <a href="https://api.whatsapp.com/send?phone={{ guest.phone | whatsapp_phone }}&text=Hey%20{{ guest.name | urlencode }}!%20%F0%9F%8E%89%20Your%20VIP%20Pass%20for%20the%20Exclusive%20Afterparty%20is%20APPROVED.%0A%0A%F0%9F%8E%9F%20Pass%20Code:%20{{ guest.ticket_code }}%0A%F0%9F%93%B2%20View%20%26%20Scan%20Your%20QR%20Pass:%20{{ request.host_url.rstrip('/') }}/pass/{{ guest.id }}%0A%0A%E2%9A%A0%EF%B8%8F%20Door%20Policy:%20Carry%20your%20physical%20government%20ID%20matching%20{{ guest.name | urlencode }}%20at%20entry." target="_blank" class="btn-act btn-whatsapp">📱 Send WhatsApp Pass</a>
+              <a href="https://api.whatsapp.com/send?phone={{ guest.phone | whatsapp_phone }}&text=Hey%20{{ guest.name | urlencode }}!%20%F0%9F%8E%89%20Your%20VIP%20Pass%20for%20the%20Exclusive%20Afterparty%20is%20APPROVED.%0A%0A%F0%9F%8E%9F%20Pass%20Code:%20{{ guest.ticket_code }}%0A%F0%9F%93%B2%20View%20%26%20Scan%20Your%20QR%20Pass:%20{{ request.host_url.rstrip('/') }}/pass/{{ guest.id }}" target="_blank" class="btn-act btn-whatsapp">📱 Send WhatsApp Pass</a>
             {% endif %}
           </td>
         </tr>
@@ -993,7 +990,6 @@ def verify_ticket(guest_id):
         <h1 style='color:#34d399; margin:0;'>✅ ACCESS GRANTED</h1>
         <h2 style='color:#ffffff; margin:10px 0;'>{guest['name']}</h2>
         <p style='color:#cbd5e1;'>Pass Code: <b>{guest['ticket_code']}</b></p>
-        <p style='color:#94a3b8; font-size:13px;'>Carry physical ID matching "{guest['name']}".</p>
       </div>
     </div>
     """
