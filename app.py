@@ -2,7 +2,10 @@ import os
 import sqlite3
 import re
 import smtplib
+import json
+import urllib.request
 import urllib.parse
+import urllib.error
 import threading
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -19,7 +22,11 @@ DB_FILE = os.environ.get("DB_PATH", "afterparty_database.db")
 HOST_EMAIL = os.environ.get("HOST_EMAIL", "kushagramishra.pcvn@gmail.com").strip()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "afterpartyadmin")
 
-# Gmail SMTP Configuration
+# Resend API Configuration (HTTPS Port 443 - Recommended for Railway)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_QoCn2b2W_AD3oRb3TswSQChHnX98CVDWH").strip()
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev").strip()
+
+# Gmail SMTP Configuration (Fallback)
 SMTP_SERVER = "smtp.gmail.com"
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", HOST_EMAIL).strip()
 RAW_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
@@ -53,32 +60,84 @@ def get_db():
     return conn
 
 # ==============================================================================
-# 3. DIRECT & ASYNCHRONOUS EMAIL SENDER
+# 3. DIRECT & ASYNCHRONOUS EMAIL SENDER (RESEND API + SMTP FALLBACK)
 # ==============================================================================
-def send_email_direct(to_email, subject, html_content):
-    if not SENDER_PASSWORD:
-        return False, "SENDER_PASSWORD variable Railway me khali hai."
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"Afterparty Host <{SENDER_EMAIL}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_content, "html"))
-
+def send_via_resend(to_email, subject, html_content):
+    if not RESEND_API_KEY:
+        return False, "RESEND_API_KEY is not configured in Railway Variables."
+    
+    url = "https://api.resend.com/emails"
+    from_header = RESEND_FROM_EMAIL
+    if "@" not in from_header:
+        from_header = "onboarding@resend.dev"
+    if "<" not in from_header:
+        from_header = f"Afterparty VIP <{from_header}>"
+        
+    payload = {
+        "from": from_header,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content
+    }
+    
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        return True, "Success via Port 465 SSL"
-    except Exception as e_ssl:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+                "User-Agent": "AfterpartyApp/1.0"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=12) as response:
+            res_body = response.read().decode("utf-8")
+            return True, f"Resend API OK: {res_body}"
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8")
+        return False, f"Resend HTTP {e.code}: {err_msg}"
+    except Exception as e:
+        return False, f"Resend Network Error: {str(e)}"
+
+def send_email_direct(to_email, subject, html_content):
+    # 1. Primary: Resend API (HTTPS Port 443 - zero firewall blocks on Railway)
+    if RESEND_API_KEY:
+        ok, res = send_via_resend(to_email, subject, html_content)
+        if ok:
+            return True, f"Delivered via Resend API: {res}"
+        print(f"[WARN] Resend attempt failed: {res}. Trying SMTP fallback...")
+
+    # 2. Secondary Fallback: Gmail SMTP (SSL 465 / TLS 587)
+    if SENDER_PASSWORD:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"Afterparty Host <{SENDER_EMAIL}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_content, "html"))
+
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
-                server.starttls()
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=8) as server:
                 server.login(SENDER_EMAIL, SENDER_PASSWORD)
                 server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-            return True, "Success via Port 587 STARTTLS"
-        except Exception as e_tls:
-            return False, f"SSL Error: {e_ssl} | STARTTLS Error: {e_tls}"
+            return True, "Delivered via Gmail SMTP (SSL 465)"
+        except Exception as e_ssl:
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=8) as server:
+                    server.starttls()
+                    server.login(SENDER_EMAIL, SENDER_PASSWORD)
+                    server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+                return True, "Delivered via Gmail SMTP (STARTTLS 587)"
+            except Exception as e_tls:
+                if RESEND_API_KEY:
+                    return False, f"Resend: {res} | SMTP: {e_tls}"
+                return False, f"SMTP Error (Railway port filter): {e_tls}"
+
+    if not RESEND_API_KEY and not SENDER_PASSWORD:
+        return False, "Neither RESEND_API_KEY nor SENDER_PASSWORD configured in Railway Variables."
+
+    return False, f"Email delivery failed: {res}"
 
 def async_send_email(to_email, subject, html_content):
     def worker():
@@ -219,171 +278,207 @@ GUEST_PAGE_HTML = """<!DOCTYPE html>
     .card::before {
       content: "";
       position: absolute;
-      top: 0; left: 15%; right: 15%; height: 2px;
-      background: linear-gradient(90deg, transparent, #d4af37, transparent);
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--gold-gradient);
+      border-radius: 22px 22px 0 0;
     }
-    .badge-bar { text-align: center; margin-bottom: 14px; }
     .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 16px;
-      background: rgba(212, 175, 55, 0.12);
-      border: 1px solid rgba(212, 175, 55, 0.4);
-      border-radius: 100px;
+      display: inline-block;
+      background: rgba(212, 175, 55, 0.15);
+      border: 1px solid rgba(212, 175, 55, 0.5);
+      color: var(--gold-light);
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.15em;
       text-transform: uppercase;
-      color: var(--gold-light);
+      padding: 5px 14px;
+      border-radius: 100px;
+      margin-bottom: 16px;
     }
-    .badge-dot { width: 6px; height: 6px; background: var(--gold-primary); border-radius: 50%; box-shadow: 0 0 8px var(--gold-primary); }
-    h1 { font-size: 27px; font-weight: 800; text-align: center; color: var(--text-white); margin-bottom: 8px; }
-    .subtitle { text-align: center; color: var(--text-muted); font-size: 13.5px; line-height: 1.5; margin-bottom: 24px; }
-    .policy-box {
-      background: rgba(8, 16, 38, 0.8);
-      border: 1px solid rgba(212, 175, 55, 0.25);
-      border-radius: 10px;
-      padding: 11px 14px;
-      margin-bottom: 22px;
-      font-size: 12px;
-      color: #fde68a;
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text-white);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
     }
-    .form-group { margin-bottom: 18px; }
-    label { display: block; font-size: 13px; font-weight: 600; color: var(--text-ivory); margin-bottom: 7px; }
-    .label-hint { font-weight: 400; color: var(--text-muted); font-size: 11.5px; }
+    p.desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: #e2e8f0;
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+    label span.req { color: #f59e0b; margin-left: 2px; }
     input {
       width: 100%;
       background: var(--input-bg);
       border: 1px solid var(--input-border);
-      border-radius: 11px;
-      padding: 13px 16px;
-      color: var(--text-white);
-      font-size: 14.5px;
+      border-radius: 12px;
+      padding: 14px 16px;
+      color: #fff;
+      font-size: 15px;
       outline: none;
+      transition: all 0.2s ease;
     }
-    input:focus { border-color: var(--gold-primary); box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2); }
+    input:focus {
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+      background: #0b1536;
+    }
+    .hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      display: block;
+    }
+    .id-notice {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px dashed rgba(245, 158, 11, 0.4);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 24px;
+      font-size: 12.5px;
+      color: #fde68a;
+      line-height: 1.45;
+    }
     .btn-submit {
       width: 100%;
-      padding: 15px;
       background: var(--gold-gradient);
-      border: none;
-      border-radius: 12px;
       color: #060b18;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
       font-size: 15.5px;
       font-weight: 800;
       letter-spacing: 0.04em;
+      text-transform: uppercase;
       cursor: pointer;
-      margin-top: 10px;
       box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
+      transition: all 0.2s;
     }
-    .btn-submit:hover { filter: brightness(1.08); }
-    .alert { padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 18px; display: none; line-height: 1.5; }
-    .alert-error { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; }
-    .result-card {
-      background: #081026;
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 16px;
-      margin: 18px 0;
-      text-align: left;
-      font-size: 13px;
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px rgba(212, 175, 55, 0.45);
     }
-    .result-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .result-row:last-child { border-bottom: none; }
-    .tag-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 2px 10px; border-radius: 100px; font-size: 11px; font-weight: 800; }
+    .feedback {
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      display: none;
+      line-height: 1.5;
+    }
+    .feedback.error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+    }
+    .feedback.success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+    }
+    footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--gold-primary); text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div id="formSection">
-      <div class="badge-bar">
-        <span class="badge"><span class="badge-dot"></span>VIP Inquiries & Access</span>
-      </div>
-      <h1>Afterparty Registration</h1>
-      <p class="subtitle">Enter your official credentials. Submissions are individually verified and approved by the host.</p>
-      
-      <div class="policy-box">
-        🔒 <b>Strict Notice:</b> Limit 1 request per person. Duplicate Mobile Numbers or Gmail IDs are automatically rejected.
-      </div>
+    <div class="badge">Official Access</div>
+    <h1>Exclusive Afterparty</h1>
+    <p class="desc">Private VIP Guest List. Entry strictly by invitation and official ID verification.</p>
 
-      <div id="alertBox" class="alert"></div>
-
-      <form id="regForm">
-        <div class="form-group">
-          <label>Name <span class="label-hint">(As on your Government ID)</span></label>
-          <input type="text" id="name" placeholder="e.g. Kushagra Mishra" required>
-        </div>
-        <div class="form-group">
-          <label>Mobile Number <span class="label-hint">(1 registration per number)</span></label>
-          <input type="tel" id="phone" placeholder="e.g. 9876543210" required>
-        </div>
-        <div class="form-group">
-          <label>Gmail ID <span class="label-hint">(QR Code ticket will be sent here)</span></label>
-          <input type="email" id="email" placeholder="e.g. yourname@gmail.com" required>
-        </div>
-        <button type="submit" class="btn-submit" id="submitBtn">Request VIP Access</button>
-      </form>
+    <div class="id-notice">
+      <b>⚠️ Door Policy Notice:</b> Your name must match your official government ID (Aadhaar / Driving License / Passport) exactly.
     </div>
 
-    <div id="successSection" style="display:none; text-align:center;">
-      <h2 style="font-size:22px; margin-bottom:8px; color:#fff;">Request Submitted</h2>
-      <p style="color:#94a3b8; font-size:13.5px; margin-bottom:20px;">Your details are recorded in the database and submitted for host review.</p>
-      
-      <div class="result-card">
-        <div class="result-row"><span style="color:#94a3b8;">Status</span><span class="tag-pending">Pending Approval</span></div>
-        <div class="result-row"><span style="color:#94a3b8;">Name (ID)</span><span style="font-weight:700;" id="resName">-</span></div>
-        <div class="result-row"><span style="color:#94a3b8;">Mobile</span><span style="font-weight:700;" id="resPhone">-</span></div>
-        <div class="result-row"><span style="color:#94a3b8;">Gmail ID</span><span style="font-weight:700;" id="resEmail">-</span></div>
+    <form id="regForm">
+      <div class="form-group">
+        <label>Full Name (As on Official ID)<span class="req">*</span></label>
+        <input type="text" id="name" name="name" placeholder="e.g. Kushagra Mishra" required autocomplete="name">
+        <span class="hint">Will be checked at the door against your physical ID.</span>
       </div>
-      <p style="color:#fde68a; font-size:12.5px; line-height:1.5;">
-        As soon as the host approves your request, your official VIP ticket with your scannable QR Code will be dispatched to your Gmail.
-      </p>
-    </div>
+
+      <div class="form-group">
+        <label>Mobile Number (WhatsApp)<span class="req">*</span></label>
+        <input type="tel" id="phone" name="phone" placeholder="e.g. +91 98765 43210" required autocomplete="tel">
+        <span class="hint">Used for 1-click VIP pass delivery and verification.</span>
+      </div>
+
+      <div class="form-group">
+        <label>Gmail ID<span class="req">*</span></label>
+        <input type="email" id="email" name="email" placeholder="name@gmail.com" required autocomplete="email">
+        <span class="hint">Your scannable QR Code VIP ticket will be emailed here upon host approval.</span>
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn-submit">Submit for VIP Entry</button>
+    </form>
+
+    <div id="feedback" class="feedback"></div>
+
+    <footer>
+      Host backstage portal &bull; <a href="/admin">Host Login</a>
+    </footer>
   </div>
 
   <script>
     const form = document.getElementById('regForm');
-    const alertBox = document.getElementById('alertBox');
+    const feedback = document.getElementById('feedback');
     const submitBtn = document.getElementById('submitBtn');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      alertBox.style.display = 'none';
-
-      const name = document.getElementById('name').value.trim();
-      const phone = document.getElementById('phone').value.trim();
-      const email = document.getElementById('email').value.trim();
-
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...';
+      submitBtn.textContent = 'Processing Application...';
+      feedback.style.display = 'none';
+
+      const payload = {
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim()
+      };
 
       try {
-        const res = await fetch('/api/register', {
+        const res = await fetch('/', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ name, phone, email })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
 
-        if (data.success) {
-          document.getElementById('formSection').style.display = 'none';
-          document.getElementById('resName').textContent = name;
-          document.getElementById('resPhone').textContent = phone;
-          document.getElementById('resEmail').textContent = email;
-          document.getElementById('successSection').style.display = 'block';
+        feedback.style.display = 'block';
+        if (data.status === 'success') {
+          feedback.className = 'feedback success';
+          feedback.innerHTML = `<b>🎉 Application Received!</b><br>${data.message}`;
+          form.reset();
         } else {
-          alertBox.className = 'alert alert-error';
-          alertBox.textContent = data.message || 'Error submitting registration.';
-          alertBox.style.display = 'block';
+          feedback.className = 'feedback error';
+          feedback.innerHTML = `<b>⚠️ Registration Notice</b><br>${data.message}`;
         }
       } catch (err) {
-        alertBox.className = 'alert alert-error';
-        alertBox.textContent = 'Network error. Please try again.';
-        alertBox.style.display = 'block';
+        feedback.style.display = 'block';
+        feedback.className = 'feedback error';
+        feedback.innerHTML = '<b>Network Error:</b> Please check your connection and try again.';
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Request VIP Access';
+        submitBtn.textContent = 'Submit for VIP Entry';
       }
     });
   </script>
@@ -396,176 +491,189 @@ PASS_PAGE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VIP Entry Pass | {{ guest.name }}</title>
+  <title>VIP Pass - {{ guest.name }}</title>
   <style>
     :root {
       --bg: #060b18;
       --card-bg: #0f1c3f;
-      --card-border: rgba(212, 175, 55, 0.4);
       --gold: #d4af37;
-      --white: #ffffff;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --gold-light: #fef08a;
+      --text-white: #ffffff;
+      --text-muted: #94a3b8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      min-height: 100vh;
       background: var(--bg);
-      color: var(--white);
-      font-family: var(--font);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      padding: 20px 16px;
+      color: #fff;
     }
-    .ticket-container {
+    .ticket {
       width: 100%;
-      max-width: 420px;
+      max-width: 440px;
       background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 24px;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      border-radius: 22px;
       overflow: hidden;
-      box-shadow: 0 25px 60px rgba(0,0,0,0.85);
+      box-shadow: 0 30px 60px rgba(0,0,0,0.85), 0 0 35px rgba(212, 175, 55, 0.2);
     }
     .ticket-header {
       background: linear-gradient(135deg, #0b1536 0%, #1e3a8a 100%);
-      padding: 28px 24px;
+      padding: 30px 24px;
       text-align: center;
       border-bottom: 2px solid var(--gold);
     }
-    .vip-badge {
-      display: inline-block;
-      background: rgba(212, 175, 55, 0.15);
+    .vip-tag {
+      background: rgba(212, 175, 55, 0.2);
       border: 1px solid var(--gold);
-      padding: 5px 14px;
+      color: var(--gold-light);
+      padding: 4px 14px;
       border-radius: 100px;
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.15em;
       text-transform: uppercase;
-      color: #fde68a;
-      margin-bottom: 8px;
+      display: inline-block;
+      margin-bottom: 10px;
     }
-    .ticket-header h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
-    .ticket-header p { font-size: 12px; color: #cbd5e1; }
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
     .ticket-body { padding: 32px 24px; text-align: center; }
-    .qr-frame {
-      width: 200px;
-      height: 200px;
-      margin: 0 auto 20px;
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .qr-box {
+      background: #fff;
+      padding: 16px;
+      border-radius: 18px;
+      display: inline-block;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    .qr-frame img { width: 100%; height: 100%; display: block; border-radius: 8px; }
-    .ticket-info {
+    .qr-box img { display: block; border-radius: 8px; }
+    .meta-table {
+      width: 100%;
+      margin-top: 24px;
       background: #081026;
+      border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 14px;
-      padding: 16px 20px;
-      text-align: left;
       font-size: 13.5px;
-      margin-bottom: 20px;
     }
-    .info-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .info-row:last-child { border-bottom: none; }
-    .info-label { color: #94a3b8; }
-    .info-val { font-weight: 700; color: #fff; }
-    .status-pill {
-      background: rgba(16, 185, 129, 0.2);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      color: #34d399;
-      padding: 2px 10px;
-      border-radius: 100px;
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
+    .meta-table td { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .meta-table tr:last-child td { border-bottom: none; }
+    .label { color: var(--text-muted); text-align: left; }
+    .val { text-align: right; font-weight: 700; color: #fff; }
+    .notice {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #cbd5e1;
+      line-height: 1.5;
     }
-    .notice { font-size: 12px; color: #cbd5e1; line-height: 1.5; }
   </style>
 </head>
 <body>
-  <div class="ticket-container">
+  <div class="ticket">
     <div class="ticket-header">
-      <span class="vip-badge">★ OFFICIAL VIP ENTRY PASS ★</span>
-      <h1>Exclusive Afterparty</h1>
-      <p>Pass Code: <b style="color:#fde68a;">{{ guest.ticket_code }}</b></p>
+      <div class="vip-tag">★ OFFICIAL VIP PASS ★</div>
+      <h1>EXCLUSIVE AFTERPARTY</h1>
+      <p style="color: #cbd5e1; font-size: 13px;">Pass Code: <b style="color: #fde68a;">{{ guest.ticket_code or ('#AP-' ~ guest.id) }}</b></p>
     </div>
-
     <div class="ticket-body">
-      {% if guest.status == 'Approved' %}
-        <div class="qr-frame">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ verify_url | urlencode }}" alt="Scan for Door Verification">
-        </div>
-        <div style="font-size:12px; color:#f59e0b; font-weight:800; margin-bottom:18px; letter-spacing:0.06em;">
-          SCAN QR CODE AT VENUE ENTRANCE
-        </div>
+      <div class="qr-box">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={{ verify_url_encoded }}" width="220" height="220" alt="VIP Pass QR">
+      </div>
+      <p style="color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 14px;">
+        Scan at venue entry
+      </p>
 
-        <div class="ticket-info">
-          <div class="info-row"><span class="info-label">Status</span><span class="status-pill">VERIFIED GUEST</span></div>
-          <div class="info-row"><span class="info-label">Guest Name (ID)</span><span class="info-val">{{ guest.name }}</span></div>
-          <div class="info-row"><span class="info-label">Mobile Number</span><span class="info-val">{{ guest.phone }}</span></div>
-          <div class="info-row"><span class="info-label">Gmail ID</span><span class="info-val">{{ guest.email }}</span></div>
-        </div>
-        <p class="notice">
-          ⚠️ <b>Door Check:</b> Entry will strictly be checked against your official ID matching <b>"{{ guest.name }}"</b>.
-        </p>
-      {% elif guest.status == 'Pending' %}
-        <div style="padding: 40px 10px;">
-          <h2 style="color:#fbbf24; margin-bottom:10px;">Review In Progress</h2>
-          <p class="notice">Your registration is currently pending host approval. Your scannable VIP QR pass will unlock here once approved.</p>
-        </div>
-      {% else %}
-        <div style="padding: 40px 10px;">
-          <h2 style="color:#ef4444; margin-bottom:10px;">Registration Declined</h2>
-          <p class="notice">Unfortunately, your access request was not approved.</p>
-        </div>
-      {% endif %}
+      <table class="meta-table">
+        <tr>
+          <td class="label">Pass Status</td>
+          <td class="val" style="color: #34d399;">VERIFIED GUEST ✓</td>
+        </tr>
+        <tr>
+          <td class="label">Guest Name (ID)</td>
+          <td class="val">{{ guest.name }}</td>
+        </tr>
+        <tr>
+          <td class="label">Mobile Number</td>
+          <td class="val">{{ guest.phone }}</td>
+        </tr>
+        <tr>
+          <td class="label">Registered Email</td>
+          <td class="val" style="font-size: 12.5px;">{{ guest.email }}</td>
+        </tr>
+      </table>
+
+      <p class="notice">
+        ⚠️ <b>Door Rule:</b> Show this QR Code and carry your physical ID matching "<b>{{ guest.name }}</b>" for entry.
+      </p>
     </div>
   </div>
 </body>
 </html>
 """
 
-VERIFY_PAGE_HTML = """<!DOCTYPE html>
+LOGIN_PAGE_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Door Verification</title>
+  <title>Host Login</title>
   <style>
-    body { background:#060b18; color:#fff; font-family:-apple-system, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; margin:0; }
-    .box { background:#0f1c3f; border:1px solid rgba(212,175,55,0.4); border-radius:20px; padding:36px; max-width:440px; width:100%; text-align:center; }
-    .icon { width:70px; height:70px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:32px; }
-    .valid { background:rgba(16,185,129,0.2); border:2px solid #10b981; color:#10b981; }
-    .invalid { background:rgba(239,68,68,0.2); border:2px solid #ef4444; color:#ef4444; }
-    .details { background:#081026; border-radius:12px; padding:16px; text-align:left; margin:20px 0; font-size:14px; border:1px solid rgba(255,255,255,0.08); }
-    .row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
-    .row:last-child { border-bottom:none; }
+    body {
+      background: #060b18;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .box {
+      width: 100%;
+      max-width: 380px;
+      background: #0f1c3f;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      border-radius: 18px;
+      padding: 36px 28px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+      text-align: center;
+    }
+    h2 { margin-bottom: 20px; font-size: 20px; font-weight: 800; color: #fff; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      background: #081026;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 16px;
+      outline: none;
+    }
+    input:focus { border-color: #d4af37; }
+    button {
+      width: 100%;
+      background: linear-gradient(135deg, #d4af37, #f59e0b);
+      border: none;
+      padding: 13px;
+      border-radius: 10px;
+      font-weight: 800;
+      color: #060b18;
+      cursor: pointer;
+      font-size: 14.5px;
+    }
+    .err { color: #f87171; font-size: 13px; margin-bottom: 14px; }
   </style>
 </head>
 <body>
   <div class="box">
-    {% if guest and guest.status == 'Approved' %}
-      <div class="icon valid">✓</div>
-      <h2 style="color:#34d399; margin-bottom:6px;">ENTRY AUTHORIZED</h2>
-      <p style="color:#94a3b8; font-size:13px;">Official Approved VIP Guest</p>
-      
-      <div class="details">
-        <div class="row"><span style="color:#94a3b8;">Pass Code</span><b style="color:#fde68a;">{{ guest.ticket_code }}</b></div>
-        <div class="row"><span style="color:#94a3b8;">Match With ID</span><b>{{ guest.name }}</b></div>
-        <div class="row"><span style="color:#94a3b8;">Mobile Number</span><b>{{ guest.phone }}</b></div>
-        <div class="row"><span style="color:#94a3b8;">Gmail ID</span><b>{{ guest.email }}</b></div>
-        <div class="row"><span style="color:#94a3b8;">Status</span><b style="color:#34d399;">APPROVED</b></div>
-      </div>
-      <p style="color:#cbd5e1; font-size:12px;">Verify that the visitor's physical ID matches <b>"{{ guest.name }}"</b> before admitting.</p>
-    {% else %}
-      <div class="icon invalid">✕</div>
-      <h2 style="color:#f87171; margin-bottom:6px;">ENTRY DENIED</h2>
-      <p style="color:#94a3b8; font-size:13px;">This QR Code is invalid or has not been approved by the host.</p>
-    {% endif %}
+    <h2>🔒 Host Operations Login</h2>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="POST">
+      <input type="password" name="password" placeholder="Enter Host Password" required autofocus>
+      <button type="submit">Access Control Center</button>
+    </form>
   </div>
 </body>
 </html>
@@ -714,6 +822,7 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
             {% endif %}
             {% if guest.status == 'Approved' %}
               <a href="/pass/{{ guest.id }}" target="_blank" class="btn-act btn-view">View QR Ticket</a>
+              <a href="https://wa.me/{{ guest.phone | replace('+', '') | replace(' ', '') }}?text=Hey%20{{ guest.name | urlencode }}!%20Your%20VIP%20Pass%20for%20the%20Exclusive%20Afterparty%20is%20approved.%20Access%20your%20QR%20Code%20Ticket%20here:%20{{ request.host_url.rstrip('/') }}/pass/{{ guest.id }}" target="_blank" class="btn-act" style="background: rgba(37, 211, 102, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">WhatsApp Pass</a>
             {% endif %}
           </td>
         </tr>
@@ -729,86 +838,56 @@ ADMIN_PAGE_HTML = """<!DOCTYPE html>
 </html>
 """
 
-LOGIN_PAGE_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Host Login</title>
-  <style>
-    body { background:#060b18; color:#fff; font-family:-apple-system, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
-    .box { background:#0d172e; border:1px solid rgba(212,175,55,0.4); border-radius:18px; padding:40px 32px; width:100%; max-width:380px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.8); }
-    input { width:100%; box-sizing:border-box; background:#081026; border:1px solid #1e293b; border-radius:10px; padding:12px 14px; color:#fff; margin:16px 0; outline:none; }
-    button { width:100%; background:linear-gradient(135deg, #d4af37, #f59e0b); border:none; padding:12px; border-radius:10px; color:#060b18; font-weight:800; cursor:pointer; }
-    .err { color:#ef4444; font-size:13px; margin-bottom:12px; }
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h2>Host Login</h2>
-    <p style="color:#94a3b8; font-size:13px; margin-top:6px;">Enter your admin password to access approvals.</p>
-    {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <form method="POST" action="/admin/login">
-      <input type="password" name="password" placeholder="Admin Password" required autofocus>
-      <button type="submit">Access Dashboard</button>
-    </form>
-  </div>
-</body>
-</html>
-"""
-
 # ==============================================================================
-# 5. ROUTES
+# 5. CONTROLLER ROUTES
 # ==============================================================================
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
-
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return render_template_string(GUEST_PAGE_HTML)
+    if request.method == "POST":
+        data = request.get_json(silent=True) or request.form
+        name = (data.get("name") or "").strip()
+        phone = (data.get("phone") or "").strip()
+        email = (data.get("email") or "").strip().lower()
 
-@app.route("/api/register", methods=["POST"])
-def register():
-    data = request.get_json() or {}
-    name = str(data.get("name", "")).strip()
-    phone = re.sub(r"\D", "", str(data.get("phone", "")))
-    email = str(data.get("email", "")).strip().lower()
+        if not name or not phone or not email:
+            return jsonify({"status": "error", "message": "All fields (Name, Phone, Gmail) are strictly mandatory."}), 400
 
-    if len(name) < 2:
-        return jsonify({"success": False, "message": "Please enter your full name as shown on your ID."}), 400
-    if len(phone) < 10 or len(phone) > 15:
-        return jsonify({"success": False, "message": "Please enter a valid 10-15 digit mobile number."}), 400
-    if not email.endswith("@gmail.com") or len(email) < 11:
-        return jsonify({"success": False, "message": "Please provide a valid Gmail address (@gmail.com)."}), 400
+        # Duplicate checking
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, status FROM guests WHERE phone = ? OR email = ?", (phone, email))
+        existing = cursor.fetchone()
 
-    conn = get_db()
-    cursor = conn.cursor()
+        if existing:
+            conn.close()
+            status = existing["status"]
+            return jsonify({
+                "status": "error",
+                "message": f"This Mobile Number or Gmail ID is already registered (Current status: {status}). Duplicate entries are not allowed."
+            }), 409
 
-    cursor.execute("SELECT id FROM guests WHERE phone = ? OR email = ?", (phone, email))
-    existing = cursor.fetchone()
-
-    if existing:
+        # Generate unique ticket pass identifier
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "INSERT INTO guests (name, phone, email, status, registered_at) VALUES (?, ?, ?, 'Pending', ?)",
+            (name, phone, email, now_str)
+        )
+        new_id = cursor.lastrowid
+        ticket_code = f"AP-{new_id:04d}"
+        cursor.execute("UPDATE guests SET ticket_code = ? WHERE id = ?", (ticket_code, new_id))
+        conn.commit()
         conn.close()
+
+        # Host Notification
+        notify_host_new_guest(name, phone, email)
+
         return jsonify({
-            "success": False,
-            "error": "duplicate",
-            "message": "🚫 A request with this Mobile Number or Gmail ID has already been recorded. Multiple submissions are prohibited."
-        }), 409
+            "status": "success",
+            "message": f"Your VIP access application has been recorded (Pass #{ticket_code}). Once the host approves your entry, your official scannable QR ticket will be delivered directly to {email}."
+        })
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute(
-        "INSERT INTO guests (name, phone, email, status, registered_at) VALUES (?, ?, ?, 'Pending', ?)",
-        (name, phone, email, now)
-    )
-    new_id = cursor.lastrowid
-    ticket_code = f"VIP-{new_id:04d}"
-    cursor.execute("UPDATE guests SET ticket_code = ? WHERE id = ?", (ticket_code, new_id))
-    conn.commit()
-    conn.close()
-
-    notify_host_new_guest(name, phone, email)
-    return jsonify({"success": True, "message": "Registration submitted successfully."})
+    return render_template_string(GUEST_PAGE_HTML)
 
 @app.route("/pass/<int:guest_id>")
 def view_pass(guest_id):
@@ -819,22 +898,53 @@ def view_pass(guest_id):
     conn.close()
 
     if not guest:
-        return "Pass not found", 404
+        return "Pass Not Found", 404
 
     base_url = request.host_url.rstrip("/")
     verify_url = f"{base_url}/verify/{guest_id}"
+    verify_url_encoded = urllib.parse.quote_plus(verify_url)
 
-    return render_template_string(PASS_PAGE_HTML, guest=guest, verify_url=verify_url)
+    return render_template_string(
+        PASS_PAGE_HTML, 
+        guest=guest, 
+        verify_url=verify_url, 
+        verify_url_encoded=verify_url_encoded
+    )
 
 @app.route("/verify/<int:guest_id>")
-def verify_door(guest_id):
+def verify_ticket(guest_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM guests WHERE id = ?", (guest_id,))
     guest = cursor.fetchone()
     conn.close()
 
-    return render_template_string(VERIFY_PAGE_HTML, guest=guest)
+    if not guest:
+        return """
+        <div style='background:#060b18; color:#ef4444; padding:50px; font-family:sans-serif; text-align:center;'>
+          <h1>❌ INVALID PASS</h1>
+          <p>This QR code does not match any registered guest record.</p>
+        </div>
+        """, 404
+
+    if guest["status"] != "Approved":
+        return f"""
+        <div style='background:#060b18; color:#f59e0b; padding:50px; font-family:sans-serif; text-align:center;'>
+          <h1>⚠️ ENTRY NOT CLEARED</h1>
+          <p>Pass status for <b>{guest['name']}</b> is: <b>{guest['status']}</b>.</p>
+        </div>
+        """, 403
+
+    return f"""
+    <div style='background:#060b18; color:#10b981; padding:50px; font-family:sans-serif; text-align:center;'>
+      <div style='border:2px solid #10b981; border-radius:18px; padding:30px; display:inline-block; background:#0d172e;'>
+        <h1 style='color:#34d399; margin:0;'>✅ ACCESS GRANTED</h1>
+        <h2 style='color:#ffffff; margin:10px 0;'>{guest['name']}</h2>
+        <p style='color:#cbd5e1;'>Pass Code: <b>{guest['ticket_code']}</b></p>
+        <p style='color:#94a3b8; font-size:13px;'>Carry physical ID matching "{guest['name']}".</p>
+      </div>
+    </div>
+    """
 
 @app.route("/admin")
 def admin():
@@ -878,18 +988,21 @@ def admin():
 # Direct Diagnostics Route (Check in browser tab)
 @app.route("/test-mail")
 def test_mail_diagnose():
-    target = request.args.get("to", SENDER_EMAIL)
-    subject = "🧪 Test Diagnostic Email"
-    html = "<h3>✅ Your Railway email setup is working!</h3>"
-    
+    target = request.args.get("to", HOST_EMAIL)
+    subject = "🧪 Test VIP Pass Delivery"
+    html = """
+    <div style='background: #0f1c3f; color: #ffffff; padding: 25px; border-radius: 14px; font-family: sans-serif; border: 1px solid #d4af37;'>
+      <h2 style='color: #d4af37; margin-top: 0;'>✅ Email Service Working!</h2>
+      <p style='color: #e2e8f0;'>Your Afterparty backend on Railway is now successfully delivering emails via HTTPS.</p>
+    </div>
+    """
     ok, message = send_email_direct(target, subject, html)
-    
     return jsonify({
         "status": "SUCCESS" if ok else "FAILED",
-        "sender_email": SENDER_EMAIL,
+        "service_used": "Resend API" if RESEND_API_KEY else ("Gmail SMTP" if SENDER_PASSWORD else "None"),
+        "has_resend_api_key": bool(RESEND_API_KEY),
+        "resend_key_preview": (RESEND_API_KEY[:6] + "...") if RESEND_API_KEY else None,
         "recipient": target,
-        "has_password": bool(SENDER_PASSWORD),
-        "password_length": len(SENDER_PASSWORD),
         "detail": message
     })
 
@@ -959,6 +1072,6 @@ def export_json():
 # 6. RAILWAY PRODUCTION ENTRYPOINT
 # ==============================================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     print(f"🚀 Starting Afterparty Backend on port {port}...")
     app.run(host="0.0.0.0", port=port, debug=False)
